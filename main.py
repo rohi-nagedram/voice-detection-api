@@ -1,13 +1,14 @@
 from flask import Flask, request, jsonify
 import requests
 import os
+import base64
 
 app = Flask(__name__)
 
-# Simple API key for GUVI tester
+# API key expected by GUVI
 API_KEY = "test123"
 
-# Hugging Face config (token comes from Render env variable)
+# Hugging Face config
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_MODEL = "superb/hubert-large-superb-er"
 HF_API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
@@ -22,32 +23,33 @@ def health():
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    # ---- Auth check ----
-    auth = request.headers.get("Authorization")
-    if auth != f"Bearer {API_KEY}":
+    # ---- Header auth (GUVI style) ----
+    api_key = request.headers.get("x-api-key")
+    if api_key != API_KEY:
         return jsonify({"error": "Unauthorized"}), 401
 
     # ---- Input check ----
     data = request.get_json()
-    if not data or "audio_url" not in data:
-        return jsonify({"error": "audio_url required"}), 400
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
 
-    audio_url = data["audio_url"]
+    if "audio_base64" not in data:
+        return jsonify({"error": "audio_base64 required"}), 400
 
-    # ---- Download audio ----
+    audio_base64 = data["audio_base64"]
+
+    # ---- Decode base64 ----
     try:
-        audio_resp = requests.get(audio_url, timeout=15)
-        if audio_resp.status_code != 200:
-            return jsonify({"error": "Failed to download audio"}), 400
+        audio_bytes = base64.b64decode(audio_base64)
     except Exception:
-        return jsonify({"error": "Invalid audio URL"}), 400
+        return jsonify({"error": "Invalid base64 audio"}), 400
 
     # ---- HuggingFace inference ----
     try:
         hf_resp = requests.post(
             HF_API_URL,
             headers=HF_HEADERS,
-            data=audio_resp.content,
+            data=audio_bytes,
             timeout=30
         )
         result = hf_resp.json()
