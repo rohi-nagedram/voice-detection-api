@@ -21,27 +21,34 @@ def health():
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    # Auth
+    # ---- API key check ----
     api_key = request.headers.get("x-api-key")
     if api_key != API_KEY:
         return jsonify({"error": "Unauthorized"}), 401
 
-    data = request.get_json()
+    # ---- FORCE JSON parsing (critical) ----
+    data = request.get_json(force=True, silent=True)
     if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
+        return jsonify({"error": "Invalid or empty JSON"}), 400
 
-    # ✅ GUVI sends audio_base64_format
-    audio_b64 = data.get("audio_base64_format") or data.get("audio_base64")
+    # ---- Accept all GUVI variants ----
+    audio_b64 = (
+        data.get("audio_base64_format")
+        or data.get("audio_base64")
+        or data.get("audioBase64")
+        or data.get("audioBase64Format")
+    )
+
     if not audio_b64:
         return jsonify({"error": "audio_base64 required"}), 400
 
-    # Decode base64
+    # ---- Decode base64 ----
     try:
         audio_bytes = base64.b64decode(audio_b64)
     except Exception:
         return jsonify({"error": "Invalid base64 audio"}), 400
 
-    # HuggingFace inference
+    # ---- HuggingFace inference ----
     try:
         hf_resp = requests.post(
             HF_API_URL,
