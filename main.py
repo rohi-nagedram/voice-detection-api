@@ -5,10 +5,8 @@ import base64
 
 app = Flask(__name__)
 
-# API key expected by GUVI
 API_KEY = "test123"
 
-# Hugging Face config
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_MODEL = "superb/hubert-large-superb-er"
 HF_API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
@@ -23,28 +21,27 @@ def health():
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    # ---- Header auth (GUVI style) ----
+    # Auth
     api_key = request.headers.get("x-api-key")
     if api_key != API_KEY:
         return jsonify({"error": "Unauthorized"}), 401
 
-    # ---- Input check ----
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid JSON"}), 400
 
-    if "audio_base64" not in data:
+    # ✅ GUVI sends audio_base64_format
+    audio_b64 = data.get("audio_base64_format") or data.get("audio_base64")
+    if not audio_b64:
         return jsonify({"error": "audio_base64 required"}), 400
 
-    audio_base64 = data["audio_base64"]
-
-    # ---- Decode base64 ----
+    # Decode base64
     try:
-        audio_bytes = base64.b64decode(audio_base64)
+        audio_bytes = base64.b64decode(audio_b64)
     except Exception:
         return jsonify({"error": "Invalid base64 audio"}), 400
 
-    # ---- HuggingFace inference ----
+    # HuggingFace inference
     try:
         hf_resp = requests.post(
             HF_API_URL,
@@ -56,7 +53,6 @@ def predict():
     except Exception:
         return jsonify({"error": "Inference failed"}), 500
 
-    # ---- Parse result ----
     confidence = 0.5
     if isinstance(result, list) and len(result) > 0:
         top = max(result, key=lambda x: x.get("score", 0))
