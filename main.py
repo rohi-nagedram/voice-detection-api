@@ -62,3 +62,26 @@ def predict():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+    @app.route("/honeypot", methods=["POST"])
+def honeypot():
+    api_key = request.headers.get("x-api-key")
+    if api_key != "test123":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+
+    payload = str(data).lower()
+
+    suspicious_keywords = [
+        "drop", "delete", "hack", "bypass", "admin",
+        "password", "token", "sql", "script"
+    ]
+
+    threat = any(word in payload for word in suspicious_keywords)
+
+    return jsonify({
+        "threat_detected": threat,
+        "threat_type": "malicious_input" if threat else "none",
+        "risk_level": "high" if threat else "low",
+        "action": "blocked" if threat else "allowed"
+    })
