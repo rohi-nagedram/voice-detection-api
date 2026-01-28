@@ -11,52 +11,48 @@ def health():
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    # ----- API key -----
-    api_key = request.headers.get("x-api-key")
-    if not api_key:
+    # -------- API KEY --------
+    if not request.headers.get("x-api-key"):
         return jsonify({"error": "x-api-key required"}), 401
 
-    # ----- JSON check -----
-    if not request.is_json:
-        return jsonify({"error": "JSON body required"}), 400
+    # -------- READ DATA FROM JSON OR FORM --------
+    data = {}
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+    else:
+        data = request.form.to_dict() or {}
 
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
-
-    # ----- Accept ALL possible GUVI keys -----
+    # -------- ACCEPT ALL POSSIBLE FIELD NAMES --------
     audio_b64 = (
         data.get("audio_base64")
         or data.get("audio_base64_format")
+        or data.get("audioBase64")
+        or data.get("audioBase64Format")
         or data.get("audio")
-        or data.get("audioData")
     )
 
     if not audio_b64:
         return jsonify({"error": "audio_base64 required"}), 400
 
-    # ----- Clean Base64 -----
+    # -------- CLEAN & DECODE BASE64 --------
     try:
-        # Remove data URI header if present
         if "," in audio_b64:
             audio_b64 = audio_b64.split(",")[-1]
 
         audio_b64 = audio_b64.strip().replace("\n", "").replace(" ", "")
 
         # Fix padding
-        missing_padding = len(audio_b64) % 4
-        if missing_padding:
-            audio_b64 += "=" * (4 - missing_padding)
+        audio_b64 += "=" * (-len(audio_b64) % 4)
 
         audio_bytes = base64.b64decode(audio_b64, validate=False)
 
         if len(audio_bytes) < 100:
-            raise ValueError("Too small")
+            raise ValueError("Invalid audio")
 
     except Exception:
         return jsonify({"error": "Invalid base64 audio"}), 400
 
-    # ----- Dummy model response (acceptable for hackathon) -----
+    # -------- RESPONSE --------
     return jsonify({
         "prediction": "AI-generated",
         "confidence": 0.50
